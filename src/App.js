@@ -120,8 +120,8 @@ function App() {
     SHOW_BACKGROUND: false,
   });
 
-  const claimNFTs = () => {
-    let cost = CONFIG.WEI_COST;
+  const claimNFTs = async () => {
+    let cost = await blockchain.smartContract.methods.getCurrentPrice().call();
     let gasLimit = CONFIG.GAS_LIMIT;
     let totalCostWei = String(cost * mintAmount);
     let totalGasLimit = String(gasLimit * mintAmount);
@@ -129,28 +129,49 @@ function App() {
     console.log("Gas limit: ", totalGasLimit);
     setFeedback(`Minting your ${CONFIG.NFT_NAME}...`);
     setClaimingNft(true);
-    blockchain.smartContract.methods
-      .mint(blockchain.account, mintAmount)
-      .send({
+    await blockchain.smartContract.methods
+      .mint(mintAmount)
+      .call({
         gasLimit: String(totalGasLimit),
         to: CONFIG.CONTRACT_ADDRESS,
         from: blockchain.account,
         value: totalCostWei,
       })
-      .once("error", (err) => {
-        console.log(err);
-        setFeedback("Sorry, something went wrong please try again later.");
-        setClaimingNft(false);
-      })
       .then((receipt) => {
         console.log(receipt);
-        setFeedback(
-          `WOW, the ${CONFIG.NFT_NAME} is yours! go visit Opensea.io to view it.`
-        );
+        Mint();
         setClaimingNft(false);
         dispatch(fetchData(blockchain.account));
+      }).catch((error) => {
+        if (error.code === -32603) {
+          setFeedback(error.data.message.slice(20));
+        } else if (error.code === -32000) {
+          setFeedback("Insufficient Funds.");
+        } else if (error.code === 4001) {
+          setFeedback("Mint Canceled , Please Try Again.");
+        } else {
+          setFeedback("Something Went Wrong , Please Try Again.");
+        }
+        setClaimingNft(false);
       });
   };
+
+
+  async function Mint() {
+    let cost = await blockchain.smartContract.methods.getCurrentPrice().call();
+    let gasLimit = CONFIG.GAS_LIMIT;
+    let totalGasLimit = String(gasLimit * mintAmount);
+    let totalCostWei = String(cost * mintAmount);
+    await blockchain.smartContract.methods.mint(mintAmount).send({
+      gasLimit: String(totalGasLimit),
+      to: CONFIG.CONTRACT_ADDRESS,
+      from: blockchain.account,
+      value: totalCostWei,
+    });
+    setFeedback(
+      `WOW, the ${CONFIG.NFT_NAME} is yours! go visit Opensea.io to view it.`
+    );
+  }
 
   const decrementMintAmount = () => {
     let newMintAmount = mintAmount - 1;
@@ -249,13 +270,13 @@ function App() {
             >
               <StyledButton
                 onClick={(e) => {
-                  window.open("/config/roadmap.pdf", "_blank");
+                  window.open("https://discord.com", "_blank");
                 }}
                 style={{
                   margin: "5px",
                 }}
               >
-                Roadmap
+                Discord
               </StyledButton>
               <StyledButton
                 style={{
@@ -302,7 +323,7 @@ function App() {
                 </s.TextDescription>
                 <s.SpacerSmall />
                 {blockchain.account === "" ||
-                blockchain.smartContract === null ? (
+                  blockchain.smartContract === null ? (
                   <s.Container ai={"center"} jc={"center"}>
                     <s.TextDescription
                       style={{
